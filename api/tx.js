@@ -70,6 +70,17 @@ export default async function handler(req, res) {
       if (type === 'production' && !from) return res.status(400).json({ error: 'Choose the account' });
       if (type === 'transfer' && (!from || !to || from === to)) return res.status(400).json({ error: 'Choose two different accounts' });
 
+      if (b.action === 'update') {
+        const id = Number(b.id);
+        if (!id) return res.status(400).json({ error: 'Bad id' });
+        await sql`UPDATE entries SET type = ${type},
+                    from_account = ${type === 'income' ? null : from},
+                    to_account = ${type === 'production' ? null : to},
+                    amount = ${amount}, date = ${date}, note = ${note}
+                  WHERE id = ${id}`;
+        return res.status(200).json({ ok: true });
+      }
+
       await sql`INSERT INTO entries (type, from_account, to_account, amount, date, note)
                 VALUES (${type}, ${type === 'income' ? null : from}, ${type === 'production' ? null : to}, ${amount}, ${date}, ${note})`;
       return res.status(200).json({ ok: true });

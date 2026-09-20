@@ -86,6 +86,11 @@
   .amt.income { color: var(--in); } .amt.production { color: var(--out); } .amt.transfer { color: var(--move); }
   .del { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
   .del:hover { color: var(--out); }
+  .acts { display: flex; gap: 2px; }
+  .edit { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .edit:hover { color: var(--in); }
+  .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-left: 8px; }
+  .editing { font-size: .9rem; color: var(--out); margin-bottom: 10px; }
   .empty { color: var(--muted); padding: 14px 0; }
   .list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px; }
 
@@ -132,8 +137,9 @@
         <button role="tab" data-t="transfer" aria-selected="false">Move between banks</button>
         <button role="tab" data-t="production" aria-selected="false">Production cost</button>
       </div>
+      <div class="editing hidden" id="editBanner">Editing an existing entry</div>
       <div class="grid" id="fields"></div>
-      <button class="save" id="saveBtn">Save entry</button>
+      <button class="save" id="saveBtn">Save entry</button><button class="save ghost hidden" id="cancelBtn">Cancel</button>
       <div class="msg" id="msg"></div>
     </div>
 
@@ -152,6 +158,7 @@ const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000
 let password = localStorage.getItem('ledger_pw') || '';
 let data = { accounts: [], entries: [] };
 let tab = 'income';
+let editingId = null;
 
 async function api(method, body, query = '') {
   const res = await fetch('/api/tx' + query, {
@@ -243,15 +250,22 @@ function render() {
       <div class="d">${new Date(e.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
       <div class="what"><span class="tag ${e.type}">${label}</span>${what}${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}</div>
       <div class="amt ${e.type}">${sign}${money(e.amount)}</div>
-      <button class="del" data-del="${e.id}" aria-label="Delete entry">Delete</button>
+      <div class="acts">
+        <button class="edit" data-edit="${e.id}" aria-label="Edit entry">Edit</button>
+        <button class="del" data-del="${e.id}" aria-label="Delete entry">Delete</button>
+      </div>
     </div>`;
   }).join('') : '<div class="empty">No entries yet. Add your first one above.</div>';
   document.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = async () => {
       if (!confirm('Delete this entry?')) return;
       await api('DELETE', null, '?id=' + b.dataset.del);
+      if (editingId === Number(b.dataset.del)) stopEdit();
       await load();
     };
+  });
+  document.querySelectorAll('[data-edit]').forEach((b) => {
+    b.onclick = () => startEdit(Number(b.dataset.edit));
   });
 }
 
@@ -272,14 +286,40 @@ function renderFields() {
   if (tab === 'transfer' && data.accounts.length > 1) $('to').selectedIndex = 1;
 }
 
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', x.dataset.t === t));
+  $('msg').textContent = '';
+  renderFields();
+}
 document.querySelectorAll('.tabs button').forEach((b) => {
-  b.onclick = () => {
-    tab = b.dataset.t;
-    document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', x === b));
-    $('msg').textContent = '';
-    renderFields();
-  };
+  b.onclick = () => setTab(b.dataset.t);
 });
+
+function startEdit(id) {
+  const e = data.entries.find((x) => x.id === id);
+  if (!e) return;
+  editingId = id;
+  setTab(e.type);
+  if ($('from') && e.from_account) $('from').value = e.from_account;
+  if ($('to') && e.to_account) $('to').value = e.to_account;
+  $('amount').value = e.amount;
+  $('date').value = e.date;
+  $('note').value = e.note || '';
+  $('saveBtn').textContent = 'Update entry';
+  $('cancelBtn').classList.remove('hidden');
+  $('editBanner').classList.remove('hidden');
+  document.querySelector('.add').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function stopEdit() {
+  editingId = null;
+  $('saveBtn').textContent = 'Save entry';
+  $('cancelBtn').classList.add('hidden');
+  $('editBanner').classList.add('hidden');
+  renderFields();
+}
+$('cancelBtn').onclick = stopEdit;
 
 $('saveBtn').onclick = async () => {
   $('msg').textContent = '';
@@ -291,11 +331,13 @@ $('saveBtn').onclick = async () => {
     from_account: $('from') ? $('from').value : null,
     to_account: $('to') ? $('to').value : null,
   };
+  if (editingId) { body.action = 'update'; body.id = editingId; }
   $('saveBtn').disabled = true;
   try {
     await api('POST', body);
+    const wasEditing = !!editingId;
     await load();
-    renderFields();
+    if (wasEditing) stopEdit(); else renderFields();
   } catch (e) {
     $('msg').textContent = e.message;
   } finally {
