@@ -92,6 +92,14 @@
   .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); margin-left: 8px; }
   .editing { font-size: .9rem; color: var(--out); margin-bottom: 10px; }
   .empty { color: var(--muted); padding: 14px 0; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters select, .filters input { width: auto; flex: 1 1 140px; min-width: 0; }
+  .filters .clear { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+  .pager { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 12px; color: var(--muted); font-size: .9rem; }
+  .pager .nav { display: flex; gap: 8px; align-items: center; }
+  .pager button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .pager select { width: auto; padding: 6px 8px; }
   .list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px; }
 
   #login { max-width: 320px; margin: 18vh auto 0; }
@@ -144,7 +152,19 @@
     </div>
 
     <h2>Entries</h2>
+    <div class="filters">
+      <select id="fType" aria-label="Filter by type">
+        <option value="all">All types</option>
+        <option value="income">Income</option>
+        <option value="transfer">Moves between banks</option>
+        <option value="production">Production cost</option>
+      </select>
+      <select id="fBank" aria-label="Filter by bank"></select>
+      <input id="fSearch" type="search" placeholder="Search notes" aria-label="Search notes">
+      <button class="clear" id="fClear">Clear filters</button>
+    </div>
     <div class="list" id="list"></div>
+    <div class="pager" id="pager"></div>
   </div>
 </div>
 
@@ -159,6 +179,8 @@ let password = localStorage.getItem('ledger_pw') || '';
 let data = { accounts: [], entries: [] };
 let tab = 'income';
 let editingId = null;
+let page = 1;
+let pageSize = 10;
 
 async function api(method, body, query = '') {
   const res = await fetch('/api/tx' + query, {
@@ -206,7 +228,10 @@ function monthOptions() {
     }).join('');
   $('month').value = months.includes(cur) || cur === 'all' ? cur : 'all';
 }
-$('month').onchange = render;
+$('month').onchange = () => { page = 1; render(); };
+['fType', 'fBank'].forEach((id) => { $(id).onchange = () => { page = 1; render(); }; });
+$('fSearch').oninput = () => { page = 1; render(); };
+$('fClear').onclick = () => { $('fType').value = 'all'; $('fBank').value = 'all'; $('fSearch').value = ''; page = 1; render(); };
 
 function render() {
   monthOptions();
@@ -240,7 +265,21 @@ function render() {
     };
   });
 
-  $('list').innerHTML = shown.length ? shown.map((e) => {
+  const bankSel = $('fBank');
+  const prevBank = bankSel.value || 'all';
+  bankSel.innerHTML = '<option value="all">All banks</option>' +
+    data.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('');
+  bankSel.value = prevBank;
+  const ft = $('fType').value, fb = $('fBank').value, fs = $('fSearch').value.trim().toLowerCase();
+  const rows = shown.filter((e) =>
+    (ft === 'all' || e.type === ft) &&
+    (fb === 'all' || e.from_account === Number(fb) || e.to_account === Number(fb)) &&
+    (!fs || (e.note || '').toLowerCase().includes(fs)));
+  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+  if (page > pages) page = pages;
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
+
+  $('list').innerHTML = pageRows.length ? pageRows.map((e) => {
     let what, sign = '';
     if (e.type === 'income') { what = `Income into <b>${esc(accName(e.to_account))}</b>`; sign = '+'; }
     if (e.type === 'transfer') { what = `<b>${esc(accName(e.from_account))}</b> to <b>${esc(accName(e.to_account))}</b>`; }
@@ -255,7 +294,23 @@ function render() {
         <button class="del" data-del="${e.id}" aria-label="Delete entry">Delete</button>
       </div>
     </div>`;
-  }).join('') : '<div class="empty">No entries yet. Add your first one above.</div>';
+  }).join('') : `<div class="empty">${data.entries.length ? 'No entries match these filters.' : 'No entries yet. Add your first one above.'}</div>`;
+
+  $('pager').innerHTML = rows.length ? `
+    <span>${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}</span>
+    <div class="nav">
+      <button id="pPrev" ${page <= 1 ? 'disabled' : ''}>Previous</button>
+      <span>Page ${page} of ${pages}</span>
+      <button id="pNext" ${page >= pages ? 'disabled' : ''}>Next</button>
+    </div>
+    <label style="margin:0">Per page
+      <select id="pSize">${[10, 25, 50, 100].map((n) => `<option value="${n}" ${n === pageSize ? 'selected' : ''}>${n}</option>`).join('')}</select>
+    </label>` : '';
+  if (rows.length) {
+    $('pPrev').onclick = () => { page--; render(); };
+    $('pNext').onclick = () => { page++; render(); };
+    $('pSize').onchange = () => { pageSize = Number($('pSize').value); page = 1; render(); };
+  }
   document.querySelectorAll('[data-del]').forEach((b) => {
     b.onclick = async () => {
       if (!confirm('Delete this entry?')) return;
