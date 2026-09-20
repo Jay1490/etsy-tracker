@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Etsy Shop Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1c2626;
+    --muted: #667372;
+    --paper: #f4f6f2;
+    --panel: #ffffff;
+    --line: #dde2da;
+    --in: #0d6b5f;
+    --in-bg: #e3f1ed;
+    --out: #b4530f;
+    --out-bg: #fbeadb;
+    --move: #4b5a78;
+    --move-bg: #e8ecf4;
+    --radius: 10px;
+    --head: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e7eeeb; --muted: #93a19e; --paper: #121816; --panel: #1a2220; --line: #2a3532;
+      --in: #4fc4ae; --in-bg: #16332e; --out: #f0975a; --out-bg: #3a2717; --move: #9fb3dd; --move-bg: #222c40;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body { margin: 0; color: var(--ink); font: 16px/1.5 var(--body); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1, h2 { font-family: var(--head); margin: 0; letter-spacing: -0.01em; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.05rem; margin-bottom: 10px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  select, input, button { font: inherit; color: inherit; }
+  select, input {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; width: 100%;
+  }
+  :focus-visible { outline: 2px solid var(--in); outline-offset: 2px; }
+  .top select { width: auto; }
+
+  .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; }
+  .totals > div { padding: 16px; }
+  .totals > div + div { border-left: 1px solid var(--line); }
+  .totals .lbl { color: var(--muted); font-size: .85rem; }
+  .totals .num { font-family: var(--head); font-size: 1.5rem; font-weight: 700; }
+  .num.in { color: var(--in); } .num.out { color: var(--out); }
+  .num.loss { color: var(--out); }
+
+  .banks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; }
+  .bank { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+  .bank .name { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: .9rem; }
+  .bank .name button { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 4px; font-size: .8rem; text-decoration: underline; }
+  .bank .bal { font-family: var(--head); font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+
+  .add { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 22px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tabs button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  .tabs button[aria-selected="true"] { color: #fff; border-color: transparent; }
+  .tabs button[data-t="income"][aria-selected="true"] { background: var(--in); }
+  .tabs button[data-t="transfer"][aria-selected="true"] { background: var(--move); }
+  .tabs button[data-t="production"][aria-selected="true"] { background: var(--out); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 3px; }
+  .save { margin-top: 14px; background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; font-weight: 700; }
+  .save:disabled { opacity: .5; cursor: wait; }
+  .msg { margin-top: 10px; font-size: .9rem; color: var(--out); min-height: 1.2em; }
+
+  .row { display: grid; grid-template-columns: 84px 1fr auto auto; gap: 10px; align-items: center; padding: 11px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row .d { color: var(--muted); font-size: .85rem; }
+  .row .what { min-width: 0; }
+  .row .what b { font-weight: 500; }
+  .row .note { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+  .tag { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 999px; margin-right: 6px; }
+  .tag.income { background: var(--in-bg); color: var(--in); }
+  .tag.production { background: var(--out-bg); color: var(--out); }
+  .tag.transfer { background: var(--move-bg); color: var(--move); }
+  .amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .amt.income { color: var(--in); } .amt.production { color: var(--out); } .amt.transfer { color: var(--move); }
+  .del { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .del:hover { color: var(--out); }
+  .empty { color: var(--muted); padding: 14px 0; }
+  .list { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 16px; }
+
+  #login { max-width: 320px; margin: 18vh auto 0; }
+  #login input { margin: 10px 0; }
+  .hidden { display: none !important; }
+
+  @media (max-width: 620px) {
+    .totals, .banks { grid-template-columns: 1fr; }
+    .totals > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    .row { grid-template-columns: 1fr auto auto; }
+    .row .d { grid-column: 1 / -1; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="login" class="hidden">
+    <h1>Etsy Shop Ledger</h1>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="save" id="loginBtn" style="margin-top:0">Open</button>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="top">
+      <h1>Etsy Shop Ledger</h1>
+      <select id="month" aria-label="Month"></select>
+    </div>
+
+    <div class="totals">
+      <div><div class="lbl">Income</div><div class="num in" id="tIn">₹0</div></div>
+      <div><div class="lbl">Production cost (forex card)</div><div class="num out" id="tOut">₹0</div></div>
+      <div><div class="lbl">Left after production cost</div><div class="num" id="tNet">₹0</div></div>
+    </div>
+
+    <h2>Bank accounts</h2>
+    <div class="banks" id="banks"></div>
+
+    <div class="add">
+      <div class="tabs" role="tablist">
+        <button role="tab" data-t="income" aria-selected="true">Income received</button>
+        <button role="tab" data-t="transfer" aria-selected="false">Move between banks</button>
+        <button role="tab" data-t="production" aria-selected="false">Production cost</button>
+      </div>
+      <div class="grid" id="fields"></div>
+      <button class="save" id="saveBtn">Save entry</button>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <h2>Entries</h2>
+    <div class="list" id="list"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
+const money = (n) => inr.format(n);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+let password = localStorage.getItem('ledger_pw') || '';
+let data = { accounts: [], entries: [] };
+let tab = 'income';
+
+async function api(method, body, query = '') {
+  const res = await fetch('/api/tx' + query, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'x-password': password },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(json.error || 'Something went wrong'); e.status = res.status; throw e; }
+  return json;
+}
+
+async function load() {
+  try {
+    data = await api('GET');
+    localStorage.setItem('ledger_pw', password);
+    $('login').classList.add('hidden');
+    $('app').classList.remove('hidden');
+    render();
+  } catch (e) {
+    if (e.status === 401) {
+      localStorage.removeItem('ledger_pw');
+      $('app').classList.add('hidden');
+      $('login').classList.remove('hidden');
+      $('loginMsg').textContent = password ? 'Wrong password.' : '';
+    } else {
+      $('login').classList.remove('hidden');
+      $('loginMsg').textContent = e.message;
+    }
+  }
+}
+
+$('loginBtn').onclick = () => { password = $('pw').value; load(); };
+$('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+
+const accName = (id) => (data.accounts.find((a) => a.id === id) || {}).name || '?';
+
+function monthOptions() {
+  const months = [...new Set(data.entries.map((e) => e.date.slice(0, 7)))].sort().reverse();
+  const cur = $('month').value || 'all';
+  $('month').innerHTML = '<option value="all">All time</option>' +
+    months.map((m) => {
+      const label = new Date(m + '-01T00:00:00').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      return `<option value="${m}">${label}</option>`;
+    }).join('');
+  $('month').value = months.includes(cur) || cur === 'all' ? cur : 'all';
+}
+$('month').onchange = render;
+
+function render() {
+  monthOptions();
+  const m = $('month').value;
+  const shown = m === 'all' ? data.entries : data.entries.filter((e) => e.date.startsWith(m));
+
+  const income = shown.filter((e) => e.type === 'income').reduce((s, e) => s + e.amount, 0);
+  const cost = shown.filter((e) => e.type === 'production').reduce((s, e) => s + e.amount, 0);
+  $('tIn').textContent = money(income);
+  $('tOut').textContent = money(cost);
+  $('tNet').textContent = money(income - cost);
+  $('tNet').className = 'num' + (income - cost < 0 ? ' loss' : '');
+
+  // Balances always use every entry, not the month filter
+  const bal = Object.fromEntries(data.accounts.map((a) => [a.id, 0]));
+  for (const e of data.entries) {
+    if (e.type === 'income') bal[e.to_account] += e.amount;
+    if (e.type === 'transfer') { bal[e.from_account] -= e.amount; bal[e.to_account] += e.amount; }
+    if (e.type === 'production') bal[e.from_account] -= e.amount;
+  }
+  $('banks').innerHTML = data.accounts.map((a) => `
+    <div class="bank">
+      <div class="name"><span>${esc(a.name)}</span><button data-rename="${a.id}">Rename</button></div>
+      <div class="bal">${money(bal[a.id])}</div>
+    </div>`).join('');
+  document.querySelectorAll('[data-rename]').forEach((b) => {
+    b.onclick = async () => {
+      const id = Number(b.dataset.rename);
+      const name = prompt('Account name', accName(id));
+      if (name && name.trim()) { await api('POST', { action: 'rename', id, name }); await load(); }
+    };
+  });
+
+  $('list').innerHTML = shown.length ? shown.map((e) => {
+    let what, sign = '';
+    if (e.type === 'income') { what = `Income into <b>${esc(accName(e.to_account))}</b>`; sign = '+'; }
+    if (e.type === 'transfer') { what = `<b>${esc(accName(e.from_account))}</b> to <b>${esc(accName(e.to_account))}</b>`; }
+    if (e.type === 'production') { what = `<b>${esc(accName(e.from_account))}</b> to forex card`; sign = '−'; }
+    const label = { income: 'Income', transfer: 'Move', production: 'Production' }[e.type];
+    return `<div class="row">
+      <div class="d">${new Date(e.date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+      <div class="what"><span class="tag ${e.type}">${label}</span>${what}${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}</div>
+      <div class="amt ${e.type}">${sign}${money(e.amount)}</div>
+      <button class="del" data-del="${e.id}" aria-label="Delete entry">Delete</button>
+    </div>`;
+  }).join('') : '<div class="empty">No entries yet. Add your first one above.</div>';
+  document.querySelectorAll('[data-del]').forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm('Delete this entry?')) return;
+      await api('DELETE', null, '?id=' + b.dataset.del);
+      await load();
+    };
+  });
+}
+
+function bankSelect(id, label) {
+  return `<div><label for="${id}">${label}</label><select id="${id}">` +
+    data.accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('') + '</select></div>';
+}
+
+function renderFields() {
+  let html = '';
+  if (tab === 'income') html += bankSelect('to', 'Money came into');
+  if (tab === 'transfer') html += bankSelect('from', 'From') + bankSelect('to', 'To');
+  if (tab === 'production') html += bankSelect('from', 'Paid from (loaded to forex card)');
+  html += `<div><label for="amount">Amount (₹)</label><input id="amount" type="number" inputmode="decimal" min="0" step="0.01"></div>
+    <div><label for="date">Date</label><input id="date" type="date" value="${today()}"></div>
+    <div><label for="note">Note (optional)</label><input id="note" type="text" maxlength="200" placeholder="${tab === 'income' ? 'Order number' : tab === 'production' ? 'Material, printing, etc.' : ''}"></div>`;
+  $('fields').innerHTML = html;
+  if (tab === 'transfer' && data.accounts.length > 1) $('to').selectedIndex = 1;
+}
+
+document.querySelectorAll('.tabs button').forEach((b) => {
+  b.onclick = () => {
+    tab = b.dataset.t;
+    document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-selected', x === b));
+    $('msg').textContent = '';
+    renderFields();
+  };
+});
+
+$('saveBtn').onclick = async () => {
+  $('msg').textContent = '';
+  const body = {
+    type: tab,
+    amount: $('amount').value,
+    date: $('date').value,
+    note: $('note').value,
+    from_account: $('from') ? $('from').value : null,
+    to_account: $('to') ? $('to').value : null,
+  };
+  $('saveBtn').disabled = true;
+  try {
+    await api('POST', body);
+    await load();
+    renderFields();
+  } catch (e) {
+    $('msg').textContent = e.message;
+  } finally {
+    $('saveBtn').disabled = false;
+  }
+};
+
+// Render the form once accounts are known
+const _render = render;
+render = function () { _render(); if (!$('fields').children.length) renderFields(); };
+
+if (password) load(); else $('login').classList.remove('hidden');
+</script>
+</body>
+</html>
